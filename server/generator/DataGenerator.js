@@ -1,5 +1,16 @@
 const RandomGenerator = require('../utils/random');
+const BinaryGenerator = require('../utils/binary');
 const DICTIONARIES = require('../data/dictionaries');
+
+const BINARY_FORMATS = new Set([
+  'imageJpeg', 'imageJpg', 'imagePng', 'imageGif', 'imageBmp', 'imageWebp', 'imageSvg',
+  'pdf', 'applicationPdf',
+  'zip', 'applicationZip', 'gzip',
+  'audioMp3', 'audioWav',
+  'videoMp4',
+  'doc', 'docx', 'xls', 'xlsx',
+  'binary', 'rawBinary'
+]);
 
 class DataGenerator {
   constructor(seed = null) {
@@ -101,6 +112,10 @@ class DataGenerator {
   }
 
   generateString(rule, rng) {
+    if (rule.format && BINARY_FORMATS.has(rule.format)) {
+      return rule.prefix + this.generateBinaryFormat(rule.format, rule, rng) + rule.suffix;
+    }
+
     if (rule.options && rule.options.length > 0) {
       return rule.prefix + rng.randomChoice(rule.options) + rule.suffix;
     }
@@ -114,6 +129,31 @@ class DataGenerator {
     }
 
     return rule.prefix + this.generateRandomString(rule.minLength, rule.maxLength, rng) + rule.suffix;
+  }
+
+  generateBinaryFormat(format, rule, rng) {
+    const binaryGen = new BinaryGenerator(rng);
+    const options = {
+      width: rule.width,
+      height: rule.height,
+      pages: rule.pages,
+      fileCount: rule.fileCount,
+      duration: rule.duration,
+      seconds: rule.seconds,
+      sampleRate: rule.sampleRate,
+      size: rule.size
+    };
+    const result = binaryGen.generate(format, options);
+
+    switch (rule.outputFormat || 'dataUrl') {
+      case 'base64':
+        return result.base64;
+      case 'object':
+        return result;
+      case 'dataUrl':
+      default:
+        return result.dataUrl;
+    }
   }
 
   generateFormat(format, rng) {

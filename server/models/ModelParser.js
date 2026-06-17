@@ -4,8 +4,24 @@ class ModelParser {
     this.validFormats = [
       'chineseName', 'englishName', 'email', 'phone', 'idCard',
       'address', 'company', 'title', 'sentence', 'paragraph',
-      'url', 'ip', 'uuid', 'custom'
+      'url', 'ip', 'uuid', 'custom',
+      'imageJpeg', 'imageJpg', 'imagePng', 'imageGif', 'imageBmp', 'imageWebp', 'imageSvg',
+      'pdf', 'applicationPdf',
+      'zip', 'applicationZip', 'gzip',
+      'audioMp3', 'audioWav',
+      'videoMp4',
+      'doc', 'docx', 'xls', 'xlsx',
+      'binary', 'rawBinary'
     ];
+    this.binaryFormats = new Set([
+      'imageJpeg', 'imageJpg', 'imagePng', 'imageGif', 'imageBmp', 'imageWebp', 'imageSvg',
+      'pdf', 'applicationPdf',
+      'zip', 'applicationZip', 'gzip',
+      'audioMp3', 'audioWav',
+      'videoMp4',
+      'doc', 'docx', 'xls', 'xlsx',
+      'binary', 'rawBinary'
+    ]);
   }
 
   parse(model) {
@@ -108,6 +124,8 @@ class ModelParser {
       }
     }
 
+    const isBinary = rule.format && this.binaryFormats.has(rule.format);
+
     return {
       format: rule.format || null,
       pattern: rule.pattern || null,
@@ -115,7 +133,17 @@ class ModelParser {
       maxLength: rule.maxLength || 20,
       options: rule.options || [],
       prefix: rule.prefix || '',
-      suffix: rule.suffix || ''
+      suffix: rule.suffix || '',
+      outputFormat: rule.outputFormat || 'dataUrl',
+      width: rule.width ? Math.max(10, Math.min(4096, Number(rule.width))) : 200,
+      height: rule.height ? Math.max(10, Math.min(4096, Number(rule.height))) : 200,
+      pages: rule.pages ? Math.max(1, Math.min(100, Number(rule.pages))) : 1,
+      fileCount: rule.fileCount ? Math.max(1, Math.min(50, Number(rule.fileCount))) : 2,
+      duration: rule.duration ? Math.max(1, Math.min(60, Number(rule.duration))) : 1,
+      seconds: rule.seconds ? Math.max(1, Math.min(60, Number(rule.seconds))) : 1,
+      sampleRate: rule.sampleRate ? Math.max(8000, Math.min(44100, Number(rule.sampleRate))) : 22050,
+      size: rule.size ? Math.max(1, Math.min(10485760, Number(rule.size))) : 1024,
+      _isBinary: isBinary
     };
   }
 

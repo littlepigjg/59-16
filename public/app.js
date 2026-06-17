@@ -23,6 +23,7 @@ const app = createApp({
     const selectedTemplate = ref('');
     const fieldTypes = ref([]);
     const formats = ref([]);
+    const binaryFormats = ref([]);
     const templates = ref([]);
 
     const modelForm = reactive({
@@ -122,7 +123,16 @@ Content-Type: application/json
             maxLength: 20,
             options: [],
             prefix: '',
-            suffix: ''
+            suffix: '',
+            outputFormat: 'dataUrl',
+            width: 200,
+            height: 200,
+            pages: 1,
+            fileCount: 2,
+            duration: 1,
+            seconds: 1,
+            sampleRate: 22050,
+            size: 1024
           };
         case 'number':
           return {
@@ -150,6 +160,51 @@ Content-Type: application/json
           return {};
       }
     };
+
+    const isBinaryFormat = (format) => {
+      return binaryFormats.value.includes(format);
+    };
+
+    const isImageFormat = (format) => {
+      return ['imageJpeg', 'imageJpg', 'imagePng', 'imageGif', 'imageBmp', 'imageWebp', 'imageSvg'].includes(format);
+    };
+
+    const isAudioFormat = (format) => {
+      return ['audioMp3', 'audioWav'].includes(format);
+    };
+
+    const isVideoFormat = (format) => {
+      return ['videoMp4'].includes(format);
+    };
+
+    const isDocumentFormat = (format) => {
+      return ['pdf', 'docx', 'xlsx'].includes(format);
+    };
+
+    const getFormatCategoryIcon = (category) => {
+      const icons = {
+        '文本': '📝',
+        '图片': '🖼️',
+        '文档': '📄',
+        '压缩': '🗜️',
+        '音频': '🎵',
+        '视频': '🎬',
+        '其他': '📦'
+      };
+      return icons[category] || '📝';
+    };
+
+    const groupedFormats = computed(() => {
+      const groups = {};
+      formats.value.forEach(fmt => {
+        const cat = fmt.category || '其他';
+        if (!groups[cat]) {
+          groups[cat] = [];
+        }
+        groups[cat].push(fmt);
+      });
+      return groups;
+    });
 
     const addField = () => {
       const newField = {
@@ -215,7 +270,7 @@ Content-Type: application/json
       seed.value = Math.floor(Math.random() * 999999999);
     };
 
-    const formatCellValue = (value) => {
+    const formatCellValue = (value, field) => {
       if (value === null || value === undefined) {
         return 'null';
       }
@@ -225,7 +280,134 @@ Content-Type: application/json
       if (typeof value === 'number') {
         return value.toLocaleString();
       }
+      if (typeof value === 'string' && value.startsWith('data:')) {
+        return null;
+      }
+      if (typeof value === 'string' && value.length > 100) {
+        return value.slice(0, 100) + '...';
+      }
       return value;
+    };
+
+    const getCellContentType = (value, field) => {
+      if (field && field.rule && field.rule.format) {
+        const fmt = field.rule.format;
+        if (isImageFormat(fmt)) return 'image';
+        if (isAudioFormat(fmt)) return 'audio';
+        if (isVideoFormat(fmt)) return 'video';
+        if (isDocumentFormat(fmt)) return 'document';
+        if (isBinaryFormat(fmt)) return 'binary';
+      }
+      if (typeof value === 'string' && value.startsWith('data:image/')) return 'image';
+      if (typeof value === 'string' && value.startsWith('data:audio/')) return 'audio';
+      if (typeof value === 'string' && value.startsWith('data:video/')) return 'video';
+      return 'text';
+    };
+
+    const previewDialogVisible = ref(false);
+    const previewContent = ref('');
+    const previewTitle = ref('');
+    const previewType = ref('image');
+
+    const showPreview = (value, field) => {
+      if (!value) return;
+      const type = getCellContentType(value, field);
+      previewType.value = type;
+      const fmt = field?.rule?.format || '';
+      const fmtLabel = formats.value.find(f => f.value === fmt)?.label || '';
+      if (type === 'image') {
+        previewTitle.value = fmtLabel || '图片预览';
+      } else if (type === 'video') {
+        previewTitle.value = fmtLabel || '视频预览';
+      } else if (type === 'audio') {
+        previewTitle.value = fmtLabel || '音频预览';
+      } else {
+        previewTitle.value = '预览';
+      }
+      previewContent.value = value;
+      previewDialogVisible.value = true;
+    };
+
+    const estimateSize = (dataUrl) => {
+      if (typeof dataUrl !== 'string') return '0 B';
+      const base64 = dataUrl.includes(',') ? dataUrl.split(',')[1] : dataUrl;
+      const padding = (base64.match(/=+$/) || [''])[0].length;
+      const bytes = Math.floor(base64.length * 0.75 - padding);
+      return formatBytes(bytes);
+    };
+
+    const formatBytes = (bytes) => {
+      if (bytes < 1024) return bytes + ' B';
+      if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(2) + ' KB';
+      return (bytes / (1024 * 1024)).toFixed(2) + ' MB';
+    };
+
+    const getExtensionFromFormat = (format) => {
+      const extensions = {
+        imageJpeg: 'jpg', imageJpg: 'jpg', imagePng: 'png',
+        imageGif: 'gif', imageBmp: 'bmp', imageWebp: 'webp',
+        imageSvg: 'svg', pdf: 'pdf', docx: 'docx', xlsx: 'xlsx',
+        zip: 'zip', gzip: 'gz', audioMp3: 'mp3', audioWav: 'wav',
+        videoMp4: 'mp4', binary: 'bin'
+      };
+      return extensions[format] || 'bin';
+    };
+
+    const getMimeTypeFromDataUrl = (dataUrl) => {
+      if (typeof dataUrl !== 'string') return 'application/octet-stream';
+      const match = dataUrl.match(/^data:([^;]+);/);
+      return match ? match[1] : 'application/octet-stream';
+    };
+
+    const guessFormatFromPreview = (dataUrl) => {
+      if (typeof dataUrl !== 'string') return 'binary';
+      const mimeType = getMimeTypeFromDataUrl(dataUrl);
+      const mimeToFormat = {
+        'image/jpeg': 'imageJpeg',
+        'image/png': 'imagePng',
+        'image/gif': 'imageGif',
+        'image/bmp': 'imageBmp',
+        'image/webp': 'imageWebp',
+        'image/svg+xml': 'imageSvg',
+        'application/pdf': 'pdf',
+        'application/zip': 'zip',
+        'application/gzip': 'gzip',
+        'audio/mpeg': 'audioMp3',
+        'audio/wav': 'audioWav',
+        'video/mp4': 'videoMp4',
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'docx',
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': 'xlsx'
+      };
+      return mimeToFormat[mimeType] || 'binary';
+    };
+
+    const downloadBinary = (dataUrl, field) => {
+      if (!dataUrl || typeof dataUrl !== 'string') return;
+      try {
+        const mimeType = getMimeTypeFromDataUrl(dataUrl);
+        const format = field?.rule?.format || '';
+        const extension = getExtensionFromFormat(format);
+        const filename = `${field?.name || 'file'}_${Date.now()}.${extension}`;
+        const base64 = dataUrl.includes(',') ? dataUrl.split(',')[1] : dataUrl;
+        const byteCharacters = atob(base64);
+        const byteArrays = [];
+        for (let i = 0; i < byteCharacters.length; i++) {
+          byteArrays.push(byteCharacters.charCodeAt(i));
+        }
+        const byteArray = new Uint8Array(byteArrays);
+        const blob = new Blob([byteArray], { type: mimeType });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        ElMessage.success(`已下载: ${filename}`);
+      } catch (e) {
+        ElMessage.error('下载失败: ' + e.message);
+      }
     };
 
     const onPaginationModeChange = (mode) => {
@@ -507,6 +689,7 @@ Content-Type: application/json
         if (typesData.success) {
           fieldTypes.value = typesData.data.types;
           formats.value = typesData.data.formats;
+          binaryFormats.value = typesData.data.binaryFormats || [];
         }
 
         if (templatesData.success) {
@@ -625,6 +808,7 @@ Content-Type: application/json
       selectedTemplate,
       fieldTypes,
       formats,
+      binaryFormats,
       templates,
       modelForm,
       currentField,
@@ -633,6 +817,11 @@ Content-Type: application/json
       displayTotalCount,
       generateApiExample,
       pageApiExample,
+      groupedFormats,
+      previewDialogVisible,
+      previewContent,
+      previewTitle,
+      previewType,
       addField,
       removeField,
       selectField,
@@ -641,6 +830,18 @@ Content-Type: application/json
       getTypeLabel,
       randomSeed,
       formatCellValue,
+      getCellContentType,
+      isBinaryFormat,
+      isImageFormat,
+      isAudioFormat,
+      isVideoFormat,
+      isDocumentFormat,
+      getFormatCategoryIcon,
+      showPreview,
+      downloadBinary,
+      estimateSize,
+      formatBytes,
+      guessFormatFromPreview,
       onPaginationModeChange,
       generateData,
       onPageChange,

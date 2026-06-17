@@ -145,15 +145,89 @@
 
                     <template v-if="currentField.type === 'string'">
                       <el-form-item label="格式">
-                        <el-select v-model="currentField.rule.format" placeholder="选择格式" clearable style="width: 100%;">
-                          <el-option
-                            v-for="fmt in formats"
-                            :key="fmt.value"
-                            :label="fmt.label"
-                            :value="fmt.value"
-                          />
+                        <el-select v-model="currentField.rule.format" placeholder="选择格式" clearable style="width: 100%;" filterable>
+                          <el-option-group
+                            v-for="(fmtList, category) in groupedFormats"
+                            :key="category"
+                            :label="getFormatCategoryIcon(category) + ' ' + category"
+                          >
+                            <el-option
+                              v-for="fmt in fmtList"
+                              :key="fmt.value"
+                              :label="fmt.label"
+                              :value="fmt.value"
+                            />
+                          </el-option-group>
                         </el-select>
                       </el-form-item>
+
+                      <template v-if="isBinaryFormat(currentField.rule.format)">
+                        <el-form-item label="输出格式">
+                          <el-select v-model="currentField.rule.outputFormat" style="width: 100%;">
+                            <el-option label="Data URL (推荐预览用)" value="dataUrl" />
+                            <el-option label="纯Base64" value="base64" />
+                          </el-select>
+                        </el-form-item>
+
+                        <template v-if="isImageFormat(currentField.rule.format)">
+                          <el-row :gutter="20">
+                            <el-col :span="12">
+                              <el-form-item label="宽度(px)">
+                                <el-input-number v-model="currentField.rule.width" :min="10" :max="2000" style="width: 100%;" />
+                              </el-form-item>
+                            </el-col>
+                            <el-col :span="12">
+                              <el-form-item label="高度(px)">
+                                <el-input-number v-model="currentField.rule.height" :min="10" :max="2000" style="width: 100%;" />
+                              </el-form-item>
+                            </el-col>
+                          </el-row>
+                        </template>
+
+                        <template v-if="currentField.rule.format === 'pdf'">
+                          <el-form-item label="页数">
+                            <el-input-number v-model="currentField.rule.pages" :min="1" :max="100" style="width: 100%;" />
+                          </el-form-item>
+                        </template>
+
+                        <template v-if="currentField.rule.format === 'zip' || currentField.rule.format === 'gzip'">
+                          <el-form-item v-if="currentField.rule.format === 'zip'" label="文件数">
+                            <el-input-number v-model="currentField.rule.fileCount" :min="1" :max="50" style="width: 100%;" />
+                          </el-form-item>
+                        </template>
+
+                        <template v-if="isAudioFormat(currentField.rule.format) || isVideoFormat(currentField.rule.format)">
+                          <el-form-item label="时长(秒)">
+                            <el-input-number v-model="currentField.rule.duration" :min="1" :max="60" style="width: 100%;" />
+                          </el-form-item>
+                          <el-form-item v-if="currentField.rule.format === 'audioWav'" label="采样率">
+                            <el-select v-model="currentField.rule.sampleRate" style="width: 100%;">
+                              <el-option :label="8000" :value="8000" />
+                              <el-option :label="16000" :value="16000" />
+                              <el-option :label="22050" :value="22050" />
+                              <el-option :label="44100" :value="44100" />
+                            </el-select>
+                          </el-form-item>
+                        </template>
+
+                        <template v-if="currentField.rule.format === 'binary'">
+                          <el-form-item label="数据大小(字节)">
+                            <el-input-number v-model="currentField.rule.size" :min="1" :max="1048576" step="1024" style="width: 100%;" />
+                          </el-form-item>
+                        </template>
+
+                        <el-alert
+                          title="二进制数据格式提示"
+                          type="info"
+                          :closable="false"
+                          show-icon
+                          style="margin-top: 12px;"
+                        >
+                          <template #default>
+                            生成的 {{ formats.find(f => f.value === currentField.rule.format)?.label || currentField.rule.format }} 数据包含正确的文件头部标识，可直接用于文件上传测试和预览功能。
+                          </template>
+                        </el-alert>
+                      </template>
 
                       <el-form-item v-if="currentField.rule.format === 'custom'" label="正则模式">
                         <el-input v-model="currentField.rule.pattern" placeholder="如：USER-{4}d" />
@@ -162,23 +236,23 @@
                         </div>
                       </el-form-item>
 
-                      <el-form-item label="最小长度">
+                      <el-form-item v-if="!isBinaryFormat(currentField.rule.format)" label="最小长度">
                         <el-input-number v-model="currentField.rule.minLength" :min="0" :max="1000" style="width: 100%;" />
                       </el-form-item>
 
-                      <el-form-item label="最大长度">
+                      <el-form-item v-if="!isBinaryFormat(currentField.rule.format)" label="最大长度">
                         <el-input-number v-model="currentField.rule.maxLength" :min="1" :max="1000" style="width: 100%;" />
                       </el-form-item>
 
-                      <el-form-item label="前缀">
+                      <el-form-item v-if="!isBinaryFormat(currentField.rule.format)" label="前缀">
                         <el-input v-model="currentField.rule.prefix" placeholder="如：USER_" />
                       </el-form-item>
 
-                      <el-form-item label="后缀">
+                      <el-form-item v-if="!isBinaryFormat(currentField.rule.format)" label="后缀">
                         <el-input v-model="currentField.rule.suffix" placeholder="如：_TEST" />
                       </el-form-item>
 
-                      <el-form-item label="可选值列表">
+                      <el-form-item v-if="!isBinaryFormat(currentField.rule.format)" label="可选值列表">
                         <el-select
                           v-model="currentField.rule.options"
                           multiple
@@ -416,12 +490,59 @@
                         :key="field.name"
                         :prop="field.name"
                         :label="field.label || field.name"
-                        min-width="150"
+                        min-width="180"
                         show-overflow-tooltip
                       >
                         <template #default="{ row }">
                           <span v-if="row[field.name] === null" class="null-value">null</span>
-                          <span v-else>{{ formatCellValue(row[field.name]) }}</span>
+                          <template v-else-if="getCellContentType(row[field.name], field) === 'image'">
+                            <div class="binary-preview image-preview" @click="showPreview(row[field.name], field)">
+                              <el-image
+                                :src="row[field.name]"
+                                :preview-src-list="[row[field.name]]"
+                                fit="cover"
+                                style="width: 60px; height: 60px; border-radius: 4px;"
+                              >
+                                <template #error>
+                                  <div class="image-fallback">
+                                    <el-icon><Picture /></el-icon>
+                                  </div>
+                                </template>
+                              </el-image>
+                              <span class="preview-hint">点击预览</span>
+                            </div>
+                          </template>
+                          <template v-else-if="getCellContentType(row[field.name], field) === 'audio'">
+                            <div class="binary-preview audio-preview">
+                              <audio :src="row[field.name]" controls style="height: 36px; width: 100%;" />
+                            </div>
+                          </template>
+                          <template v-else-if="getCellContentType(row[field.name], field) === 'video'">
+                            <div class="binary-preview video-preview" @click="showPreview(row[field.name], field)">
+                              <video :src="row[field.name]" style="width: 100px; height: 60px; object-fit: cover; border-radius: 4px;" muted />
+                              <span class="preview-hint">点击播放</span>
+                            </div>
+                          </template>
+                          <template v-else-if="getCellContentType(row[field.name], field) === 'document'">
+                            <div class="binary-preview document-preview" @click="downloadBinary(row[field.name], field)">
+                              <el-icon size="36" color="#409eff"><Document /></el-icon>
+                              <span class="doc-name">{{ formats.find(f => f.value === field.rule.format)?.label || '文档' }}</span>
+                              <el-button type="primary" link size="small">
+                                <el-icon><Download /></el-icon>
+                                下载
+                              </el-button>
+                            </div>
+                          </template>
+                          <template v-else-if="getCellContentType(row[field.name], field) === 'binary'">
+                            <div class="binary-preview other-preview" @click="downloadBinary(row[field.name], field)">
+                              <el-icon size="32" color="#909399"><Files /></el-icon>
+                              <div class="binary-info">
+                                <span class="binary-label">{{ formats.find(f => f.value === field.rule.format)?.label || '二进制' }}</span>
+                                <span class="binary-size">{{ estimateSize(row[field.name]) }}</span>
+                              </div>
+                            </div>
+                          </template>
+                          <span v-else>{{ formatCellValue(row[field.name], field) }}</span>
                         </template>
                       </el-table-column>
                     </el-table>
@@ -509,6 +630,39 @@
         </el-main>
       </el-container>
     </el-container>
+
+    <el-dialog
+      v-model="previewDialogVisible"
+      :title="previewTitle"
+      width="80%"
+      top="5vh"
+      destroy-on-close
+    >
+      <div class="preview-dialog-content">
+        <template v-if="previewType === 'image'">
+          <img :src="previewContent" style="max-width: 100%; max-height: 70vh; display: block; margin: 0 auto; border-radius: 8px;" />
+        </template>
+        <template v-else-if="previewType === 'video'">
+          <video :src="previewContent" controls style="width: 100%; max-height: 70vh; display: block; border-radius: 8px;" />
+        </template>
+        <template v-else-if="previewType === 'audio'">
+          <div style="text-align: center; padding: 40px;">
+            <el-icon size="80" color="#409eff" style="display: block; margin-bottom: 20px;"><Headset /></el-icon>
+            <audio :src="previewContent" controls style="width: 100%; max-width: 500px;" />
+          </div>
+        </template>
+        <template v-else>
+          <el-empty description="该类型暂不支持在线预览" />
+        </template>
+      </div>
+      <template #footer>
+        <el-button @click="previewDialogVisible = false">关闭</el-button>
+        <el-button type="primary" @click="downloadBinary(previewContent, { name: previewTitle.replace(/预览/g, ''), rule: { format: guessFormatFromPreview(previewContent) } })">
+          <el-icon><Download /></el-icon>
+          下载文件
+        </el-button>
+      </template>
+    </el-dialog>
   </div>
 
   <script src="https://unpkg.com/vue@3.4.0/dist/vue.global.js"></script>
